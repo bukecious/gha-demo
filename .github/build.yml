@@ -1,0 +1,72 @@
+name: Build Image
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  APP_NAME: golang-demo
+  REGISTRY: docker.io
+
+jobs:
+  Build:
+    name: Build Image
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: docker.io
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+
+    - name: Setup Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.14.0
+      id: go
+
+    - name: Run build
+      run: |
+        go get github.com/thedevsaddam/renderer/...
+        go build -v .
+
+    - name: Generate Vars
+      id: generate_vars
+      run: |
+        IMAGE_TAG=pr-${{ github.event.pull_request.number }}-$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)
+        APP_NAME=${{ github.repository }}
+        #Image ID= Name + Tag
+        IMAGE_ID=$APP_NAME:$IMAGE_TAG
+        IMAGE_REPO=$REGISTRY/$IMAGE_ID
+        echo "Image: $IMAGE_REPO"
+        echo "::set-output name=image::$IMAGE_REPO"
+        echo "::set-output name=APP_NAME::$APP_NAME"
+        echo "::set-output name=IMAGE_TAG::$IMAGE_TAG"
+        echo REPO=$APP_NAME >> $GITHUB_ENV
+        echo IMAGE=$(echo "$REGISTRY/$IMAGE_ID") >> $GITHUB_ENV
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Echo Output
+      run: |
+        echo "Image from Output: ${{ steps.generate_vars.outputs.image }}"
+        echo "Repo from Output: ${{ steps.generate_vars.outputs.APP_NAME }}"
+        echo "Image from Env:  ${{ env.IMAGE }}"
+        echo "Repo from Env:  ${{ env.REPO }}"
+
+    - name: Build and Push Docker Image
+      uses: docker/build-push-action@v3
+      with:
+        tags: ${{ env.IMAGE }}
