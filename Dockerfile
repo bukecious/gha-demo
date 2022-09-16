@@ -1,20 +1,31 @@
-FROM golang:1.17.0 as build
+# Start from base image
+FROM golang:alpine as builder
 
+# Set the current working directory inside the container
 WORKDIR /app
 
-RUN go env -w GO111MODULE=auto
-RUN go get github.com/thedevsaddam/renderer/...
+# Copy go mod and sum files
+COPY go.mod go.sum ./
 
-COPY main.go .
+# Download all dependencies
+RUN go mod download
 
-RUN go build main.go
+# Copy source from current directory to working directory
+COPY . .
 
-FROM alpine
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o main .
 
-WORKDIR /app
-EXPOSE 8080
+FROM alpine:latest
 
-COPY --from=build ./app/main ./
+RUN apk --no-cache add ca-certificates
+
+# Copy the binary executable over
+COPY --from=builder /app/main .
 COPY ./tpl ./tpl
 
+# Expose necessary port
+EXPOSE 8080
+
+# Run the created binary executable
 CMD ["./main"]
